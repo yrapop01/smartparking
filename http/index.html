@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<meta charset="utf-8" />
+
+<title>Parking Application</title>
+
+<script>
+    /*
+     * dijkstra.js
+     *
+     * Dijkstra's single source shortest path algorithm in JavaScript.
+     *
+     * Cameron McCormack <cam (at) mcc.id.au>
+     *
+     * Permission is hereby granted to use, copy, modify and distribute this
+     * code for any purpose, without fee.
+     *
+     * Initial version: October 21, 2004
+     */
+
+    function shortestPath(edges, numVertices, startVertex) {
+      var done = new Array(numVertices);
+      done[startVertex] = true;
+      var pathLengths = new Array(numVertices);
+      var predecessors = new Array(numVertices);
+      for (var i = 0; i < numVertices; i++) {
+        pathLengths[i] = edges[startVertex][i];
+        if (edges[startVertex][i] != Infinity) {
+          predecessors[i] = startVertex;
+        }
+      }
+      pathLengths[startVertex] = 0;
+      for (var i = 0; i < numVertices - 1; i++) {
+        var closest = -1;
+        var closestDistance = Infinity;
+        for (var j = 0; j < numVertices; j++) {
+          if (!done[j] && pathLengths[j] < closestDistance) {
+            closestDistance = pathLengths[j];
+            closest = j;
+          }
+        }
+        done[closest] = true;
+        for (var j = 0; j < numVertices; j++) {
+          if (!done[j]) {
+            var possiblyCloserDistance = pathLengths[closest] + edges[closest][j];
+            if (possiblyCloserDistance < pathLengths[j]) {
+              pathLengths[j] = possiblyCloserDistance;
+              predecessors[j] = closest;
+            }
+          }
+        }
+      }
+      return { "startVertex": startVertex,
+               "pathLengths": pathLengths,
+               "predecessors": predecessors };
+    }
+
+    function constructPath(shortestPathInfo, endVertex) {
+      var path = [];
+      while (endVertex != shortestPathInfo.startVertex) {
+        path.unshift(endVertex);
+        endVertex = shortestPathInfo.predecessors[endVertex];
+      }
+      return path;
+    }
+</script>
+
+<script language="javascript" type="text/javascript">
+    var RectangleWidth = 200;
+    var RectangleHeight = 100;
+
+    function node(x, y, type, state) {
+        return {x : x, y : y, type : type, state : state, i : -1};
+    }
+
+    function edge(from, to, weight, selected) {
+        return {from : from, to : to, weight : weight, selected : selected};
+    }
+
+    function drawEmpty(ctx, node) {
+        var rx = node.x - RectangleWidth / 2;
+        var ry = node.y - RectangleHeight / 2;
+        ctx.rect(rx, ry, RectangleWidth, RectangleHeight);
+        ctx.fillStyle = 'lightblue';
+        ctx.fill();
+    }
+
+    function drawOccupied(ctx, node) {
+        var W = RectangleWidth / 2;
+        var H = W / 2;
+
+        var img = new Image();
+        img.onload = function() {
+            var imx = node.x - (RectangleWidth - W) / 2;
+            var imy = node.y - (RectangleHeight - H) / 2;
+            if (node.type == 'leaf' && node.state != 'empty')
+                ctx.drawImage(img, imx, imy, W, H);
+        };
+
+        img.src = 'occupied.png';
+    }
+
+    function drawEdge(ctx, edge) {
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(edge.from.x, edge.from.y);
+        ctx.lineTo(edge.to.x, edge.to.y);
+        ctx.strokeStyle = "blue";
+        ctx.lineWidth = 5;
+        ctx.stroke();
+    }
+
+    function map(nodes, edges) {
+        for (var i = 0; i < nodes.length; i++)
+            nodes[i].i = i;
+        return {
+            nodes : nodes,
+            edges : edges,
+            draw : function(ctx) {
+                this.edges.forEach(function(edge) {
+                    if (edge.selected)
+                        drawEdge(ctx, edge);
+                });
+                this.nodes.forEach(function(node) {
+                    if (node.type != 'leaf')
+                        return;
+                    if (node.state == 'empty')
+                        drawEmpty(ctx, node);
+                    else
+                        drawOccupied(ctx, node);
+                });
+            }
+        };
+    }
+
+    function edgesMatrix(map) {
+        var m = new Array(map.nodes.length);
+
+        for (var i = 0; i < map.nodes.length; i++)
+            m[i] = new Array(map.nodes.length);
+
+        map.edges.forEach(function(edge) {
+            m[edge.from.i][edge.to.i] = edge;
+        });
+
+        return m;
+    }
+
+    function matrix(map) {
+        var m = new Array(map.nodes.length);
+
+        for (var i = 0; i < map.nodes.length; i++)
+            m[i] = new Array(map.nodes.length);
+
+        for (var i = 0; i < map.nodes.length; i++)
+            for (var j = 0; j < map.nodes.length; j++)
+                m[i][j] = Infinity;
+
+        map.edges.forEach(function(edge) {
+            m[edge.from.i][edge.to.i] = edge.weight;
+        });
+
+        return m;
+    }
+</script>
+<script language="javascript" type="text/javascript">
+var wsUri = "ws://" + window.location.host + "/";
+//var wsUri = "ws://94.159.140.2/";
+var RectangleWidth = 200;
+var RectangleHeight = 100;
+var Nodes = [node(300, 700, 'root'),
+
+             node(220, 650, 'inner'),
+             node(100, 650, 'leaf', 'empty'),
+
+             node(220, 450, 'inner'),
+             node(100, 450, 'leaf', 'empty'),
+
+             node(220, 250, 'inner'),
+             node(100, 250, 'leaf', 'empty'),
+
+             node(220, 50, 'inner'),
+             node(100, 50, 'leaf', 'empty'),
+
+             node(370, 650, 'inner'),
+             node(500, 650, 'leaf', 'empty'),
+
+             node(370, 450, 'inner'),
+             node(500, 450, 'leaf', 'empty'),
+
+             node(370, 250, 'inner'),
+             node(500, 250, 'leaf', 'empty'),
+
+             node(370, 50, 'inner'),
+             node(500, 50, 'leaf', 'empty')];
+var Edges = [edge(Nodes[0], Nodes[1], 1),
+             edge(Nodes[1], Nodes[2], 1), edge(Nodes[1], Nodes[3], 1),
+             edge(Nodes[3], Nodes[4], 1), edge(Nodes[3], Nodes[5], 1),
+             edge(Nodes[5], Nodes[6], 1), edge(Nodes[5], Nodes[7], 1),
+             edge(Nodes[7], Nodes[8], 1),
+             edge(Nodes[0], Nodes[9], 1),
+             edge(Nodes[9], Nodes[10], 1), edge(Nodes[9], Nodes[11], 1),
+             edge(Nodes[11], Nodes[12], 1), edge(Nodes[11], Nodes[13], 1),
+             edge(Nodes[13], Nodes[14], 1), edge(Nodes[13], Nodes[15], 1),
+             edge(Nodes[15], Nodes[16], 1)];
+var Map = map(Nodes, Edges);
+var EdgesMatrix = edgesMatrix(Map);
+var Matrix = matrix(Map);
+var PathInfo = shortestPath(Matrix, Nodes.length, 0); 
+var NodeMappings = [16, 14, 8, 6, 12, 10, 4, 2];
+
+var canvas;
+
+function recalcPath() {
+    Edges.forEach(function(edge) {
+        edge.selected = false;
+    });
+    
+    var minIndex = -1;
+    var minLength = -1;
+    for (var i = 1; i < PathInfo.pathLengths.length; i++) {
+        if (Nodes[i].type != 'leaf' || Nodes[i].state != 'empty')
+            continue;
+        if (minLength < 0 || minLength >= PathInfo.pathLengths[i]) {
+            minIndex = i;
+            minLength = PathInfo.pathLengths[i];
+        }
+    }
+
+    if (minIndex < 0)
+        return;
+
+    path = constructPath(PathInfo, minIndex);
+    for (var i = 0; i < path.length-1; i++)
+        EdgesMatrix[path[i]][path[i+1]].selected = true;
+    EdgesMatrix[0][path[0]].selected = true;
+}
+
+function init()
+{
+    canvas = document.getElementById("output");
+    initWebSocket();
+    recalcPath();
+    initCanvas();
+}
+
+function initWebSocket()
+{
+    websocket = new WebSocket(wsUri);
+    websocket.onopen = function(evt) { onOpen(evt) };
+    websocket.onclose = function(evt) { onClose(evt) };
+    websocket.onmessage = function(evt) { onMessage(evt) };
+    websocket.onerror = function(evt) { onError(evt) };
+}
+
+function initCanvas() {
+    redraw();
+}
+
+function putCounter(ctx) {
+    var n = Nodes.reduce(function(n, node) {
+        return (n + (node.type == 'leaf' && node.state == 'empty' ? 1 : 0));
+    }, 0);
+
+    var gradient = ctx.createLinearGradient(0, 0, 100, 0);
+    gradient.addColorStop("0", "magenta");
+    gradient.addColorStop("0.5", "blue");
+    gradient.addColorStop("1.0", "red");
+    ctx.font = "200px Verdana";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = gradient;
+    ctx.fillText("" + n, 300, 350); 
+}
+
+function redraw() {
+    var ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    Map.draw(ctx);
+    putCounter(ctx);
+}
+
+function onOpen(evt)
+{
+}
+
+function onClose(evt)
+{
+}
+
+function onMessage(evt)
+{
+    var ctx = canvas.getContext("2d");
+
+    var msg = evt.data.split(":");
+    var id = parseInt(msg[0]);
+    var state  = msg[1];
+    
+    var nid = NodeMappings[id];
+    Nodes[nid].state = state;
+    recalcPath();
+    redraw();
+}
+
+function onError(evt)
+{
+    alert('error: ' + evt.data);
+}
+
+window.addEventListener("load", init, false);
+
+</script>
+
+<canvas id="output" width="600" height="700" style="width: 80%; height: 80%; position: absolute; top: 50%; left: 50%; transform: translateX(-50%) translateY(-50%)">
+</canvas>
